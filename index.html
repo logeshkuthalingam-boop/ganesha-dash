@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#1b0f22" />
+<title>Ganesha Dash — a Ganesh Chaturthi runner</title>
+<style>
+  :root { --gold:#ffcd63; --deep:#1b0f22; }
+  * { box-sizing: border-box; }
+  html, body {
+    height:100%; width:100%; margin:0; padding:0; overflow:hidden;
+    background:var(--deep); color:#fff5e4;
+    font-family:"Trebuchet MS", Verdana, system-ui, -apple-system, sans-serif;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+    overscroll-behavior:none;
+    touch-action:none;
+  }
+  #game { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position:fixed;
+    top:max(env(safe-area-inset-top),10px);
+    left:12px;
+    right:200px;
+    display:flex; gap:8px;
+    pointer-events:none;
+    justify-content:flex-start;
+    flex-wrap:wrap;
+    z-index:4;
+  }
+  .stat {
+    background:rgba(30,12,35,.55); border:1px solid rgba(255,205,99,.35);
+    border-radius:999px; padding:5px 14px; display:flex; align-items:center; gap:8px;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    font-size:13px; letter-spacing:.5px;
+  }
+  .stat .label { opacity:.7; text-transform:uppercase; font-size:10px; }
+  .stat .value { font-weight:bold; color:var(--gold); font-size:16px; min-width:2ch; text-align:right; }
+
+  #topbar {
+    position:fixed; top:max(env(safe-area-inset-top),10px); right:12px; z-index:7;
+    display:flex; gap:8px;
+  }
+  #topbar button {
+    width:40px; height:40px; border-radius:50%;
+    background:rgba(30,12,35,.62); color:#ffe9bd;
+    border:1px solid rgba(255,205,99,.4);
+    font:inherit; font-size:17px; line-height:1; cursor:pointer;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center;
+    padding:0; touch-action:manipulation;
+    transition:background .15s ease, transform .12s ease;
+  }
+  #topbar button:hover { background:rgba(60,25,65,.9); }
+  #topbar button:active { transform:scale(.94); }
+  #topbar button.off { opacity:.45; }
+  #topbar button.playing { color:#ffd777; box-shadow:0 0 12px rgba(255,205,99,.5) inset; }
+
+  @media (max-width: 480px) {
+    #topbar { gap:6px; right:8px; }
+    #topbar button { width:34px; height:34px; font-size:14px; }
+    #hud { right:170px; }
+    .stat { font-size:11px; padding:4px 11px; gap:6px; }
+    .stat .value { font-size:14px; }
+    .stat .label { font-size:9px; }
+  }
+
+  @media (max-width: 400px) {
+    #hud {
+      top: calc(max(env(safe-area-inset-top), 10px) + 46px);
+      right: 12px;
+      justify-content: center;
+    }
+  }
+
+  .overlay {
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center;
+    padding:max(env(safe-area-inset-top),20px) 20px max(env(safe-area-inset-bottom),20px);
+    gap:14px; z-index:10;
+    background:radial-gradient(ellipse at 50% 40%, rgba(90,30,70,.65), rgba(14,6,20,.96));
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+    overflow-y:auto;
+    animation:fadeIn .3s ease;
+  }
+  .overlay.hidden { display:none; }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes floatY { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
+  @keyframes glow {
+    0%,100% { text-shadow:0 0 18px rgba(255,150,60,.55), 0 0 40px rgba(255,150,60,.25); }
+    50%     { text-shadow:0 0 26px rgba(255,190,90,.9), 0 0 60px rgba(255,150,60,.5); }
+  }
+  @keyframes shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  @keyframes pulseBtn {
+    0%,100% { box-shadow:0 8px 26px rgba(255,140,60,.4), 0 0 0 0 rgba(255,205,99,.5); }
+    50%     { box-shadow:0 12px 34px rgba(255,140,60,.6), 0 0 0 14px rgba(255,205,99,0); }
+  }
+
+  #message { gap:18px; justify-content:flex-start; padding-top:max(env(safe-area-inset-top),30px); }
+
+  .start-card {
+    width:min(680px, 94vw);
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+    padding:28px 22px;
+    background:linear-gradient(180deg, rgba(45,18,55,.72), rgba(24,10,34,.85));
+    border:1px solid rgba(255,205,99,.28);
+    border-radius:24px;
+    box-shadow:0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+    position:relative;
+  }
+
+  .om-badge {
+    width:74px; height:74px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:38px; line-height:1; color:#7a2a18; font-weight:bold;
+    background:radial-gradient(circle at 35% 30%, #ffe9a8, #ffcd63 45%, #d8862a 100%);
+    box-shadow:0 0 26px rgba(255,180,80,.65), inset 0 -4px 10px rgba(120,50,0,.4);
+    animation:floatY 3.2s ease-in-out infinite;
+    margin-top:-58px;
+    border:3px solid rgba(255,240,200,.9);
+  }
+
+  .start-title {
+    font-size:clamp(34px,8.5vw,68px);
+    margin:0; letter-spacing:3px; line-height:1.05;
+    background:linear-gradient(90deg, #ffcd63 0%, #fff2c4 25%, #ffb84d 50%, #fff2c4 75%, #ffcd63 100%);
+    background-size:200% auto;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    color:transparent;
+    animation:shimmer 4.5s linear infinite, glow 3.2s ease-in-out infinite;
+    font-weight:900;
+  }
+  .start-sub {
+    margin:-6px 0 0 0;
+    font-size:clamp(11px,2.6vw,14px);
+    letter-spacing:5px; text-transform:uppercase;
+    color:rgba(255,215,140,.75);
+  }
+  .start-tag {
+    margin:4px 0 6px 0; max-width:44ch;
+    line-height:1.55; opacity:.9; font-size:clamp(13px,3.4vw,15px);
+    color:#ffe9bd;
+  }
+
+  .how-to { width:100%; display:grid; gap:10px; grid-template-columns:repeat(3, 1fr); margin-top:2px; }
+  @media (max-width: 520px) { .how-to { grid-template-columns:1fr; } }
+  .how-item {
+    background:rgba(255,205,99,.07); border:1px solid rgba(255,205,99,.22);
+    border-radius:14px; padding:12px 10px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center;
+  }
+  .how-item .icon { font-size:26px; line-height:1; }
+  .how-item .label { font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,215,140,.85); }
+  .how-item .desc { font-size:12.5px; line-height:1.35; opacity:.82; color:#fff5e4; }
+
+  .overlay button {
+    margin-top:10px; padding:15px 48px; border-radius:999px; border:none;
+    background:linear-gradient(180deg,#ffd777,#e88945); color:#38160f;
+    font:inherit; font-size:19px; font-weight:900; letter-spacing:2px;
+    cursor:pointer; touch-action:manipulation; text-transform:uppercase;
+    animation:pulseBtn 2.2s ease-in-out infinite;
+    transition:transform .12s ease;
+  }
+  .overlay button:hover { transform:translateY(-2px); }
+  .overlay button:active { transform:translateY(1px); }
+
+  .credit { font-size:11px; opacity:.5; letter-spacing:1px; margin-top:8px; }
+
+  #game-over h2 { font-size:clamp(30px,7vw,52px); margin:0; color:var(--gold); letter-spacing:3px; animation:glow 2.6s ease-in-out infinite; }
+  #game-over p { max-width:36ch; line-height:1.55; opacity:.92; font-size:15px; }
+  #game-over .final-badge {
+    display:inline-flex; align-items:center; gap:10px;
+    padding:8px 20px; border-radius:999px;
+    background:rgba(255,205,99,.12); border:1px solid rgba(255,205,99,.4);
+    font-size:15px; color:var(--gold);
+  }
+  #game-over .new-best { display:none; margin-top:-4px; font-size:12px; letter-spacing:3px; color:#ffe9bd; text-transform:uppercase; animation:glow 1.6s ease-in-out infinite; }
+  #game-over .new-best.show { display:block; }
+
+  #pause-overlay h2 { font-size:clamp(28px,7vw,48px); margin:0; color:var(--gold); letter-spacing:3px; animation:glow 2.6s ease-in-out infinite; }
+  #pause-overlay p { margin:0 0 6px 0; font-size:13px; opacity:.7; letter-spacing:2px; text-transform:uppercase; }
+
+  .pause-actions { display:flex; flex-direction:column; gap:12px; width:min(280px, 80vw); }
+  .pause-actions button {
+    width:100%; margin:0; padding:14px 20px; font-size:16px;
+    animation:none; box-shadow:0 6px 18px rgba(255,140,60,.32);
+  }
+  .pause-actions button.secondary {
+    background:rgba(255,205,99,.1); color:#ffe9bd;
+    border:1px solid rgba(255,205,99,.4); box-shadow:none;
+  }
+  .pause-actions button.secondary:hover { background:rgba(255,205,99,.2); }
+
+  .settings-card {
+    width:min(500px, 94vw);
+    display:flex; flex-direction:column; gap:14px;
+    padding:26px 22px;
+    background:linear-gradient(180deg, rgba(45,18,55,.82), rgba(24,10,34,.9));
+    border:1px solid rgba(255,205,99,.28); border-radius:22px;
+    box-shadow:0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .settings-card h2 { margin:0 0 4px 0; font-size:26px; color:var(--gold); letter-spacing:3px; text-align:center; }
+
+  .setting-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:12px 14px;
+    background:rgba(255,205,99,.06); border:1px solid rgba(255,205,99,.18);
+    border-radius:14px; text-align:left;
+  }
+  .setting-row .info { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+  .setting-row .name { font-size:14px; font-weight:bold; letter-spacing:.5px; color:#fff5e4; }
+  .setting-row .hint { font-size:11.5px; opacity:.6; }
+
+  .toggle {
+    width:54px; height:30px; border-radius:999px;
+    background:rgba(255,205,99,.18); border:1px solid rgba(255,205,99,.4);
+    position:relative; cursor:pointer; flex-shrink:0;
+    transition:background .2s ease; touch-action:manipulation;
+  }
+  .toggle::after {
+    content:""; position:absolute; top:3px; left:3px;
+    width:22px; height:22px; border-radius:50%;
+    background:#ffe9bd;
+    transition:transform .2s ease, background .2s ease;
+    box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
+  .toggle.on { background:rgba(255,180,70,.85); }
+  .toggle.on::after { transform:translateX(24px); background:#fff; }
+
+  .segmented {
+    display:flex; gap:3px;
+    background:rgba(255,205,99,.08); border:1px solid rgba(255,205,99,.25);
+    border-radius:12px; padding:3px; flex-shrink:0;
+  }
+  .segmented button {
+    border:none; background:transparent; color:rgba(255,233,189,.7);
+    font:inherit; font-size:12px; font-weight:bold; letter-spacing:1px;
+    padding:6px 10px; border-radius:9px; cursor:pointer;
+    text-transform:uppercase; margin:0; animation:none; box-shadow:none;
+    transition:background .15s ease, color .15s ease;
+    touch-action:manipulation;
+  }
+  .segmented button:hover { color:#ffe9bd; }
+  .segmented button.active { background:linear-gradient(180deg,#ffd777,#e88945); color:#38160f; }
+
+  .danger-btn {
+    background:rgba(216,63,80,.18) !important;
+    color:#ff9baa !important;
+    border:1px solid rgba(216,63,80,.5) !important;
+    padding:12px 20px !important; font-size:13px !important;
+    animation:none !important; box-shadow:none !important; margin:0;
+  }
+  .danger-btn:hover { background:rgba(216,63,80,.3) !important; }
+
+  .settings-card > button.primary-close {
+    padding:14px 20px; font-size:16px;
+    animation:none; box-shadow:0 6px 18px rgba(255,140,60,.32);
+  }
+
+  @media (max-height: 640px) {
+    .om-badge { width:58px; height:58px; font-size:30px; margin-top:-46px; }
+    .start-card { padding:22px 18px; gap:12px; }
+    .start-tag { font-size:12.5px; }
+    .how-item { padding:8px 8px; }
+    .how-item .icon { font-size:20px; }
+    .how-item .desc { font-size:11.5px; }
+  }
+  @media (max-height: 480px) {
+    .how-to { grid-template-columns:1fr 1fr 1fr; }
+    .start-card { padding:16px 14px; }
+    .start-title { font-size:34px; }
+    .start-sub { letter-spacing:3px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="stat"><span class="label">Score</span><span class="value" id="score">0</span></div>
+  <div class="stat"><span class="label">Treats</span><span class="value" id="modaks">0</span></div>
+  <div class="stat"><span class="label">Best</span><span class="value" id="best">0</span></div>
+</div>
+
+<div id="topbar">
+  <button id="music-button" aria-label="Toggle music" aria-pressed="true">♫</button>
+  <button id="sound-button" aria-label="Toggle sound effects" aria-pressed="true">🔊</button>
+  <button id="pause-button" aria-label="Pause game">⏸</button>
+  <button id="settings-button" aria-label="Open settings">⚙</button>
+</div>
+
+<div id="message" class="overlay">
+  <div class="start-card">
+    <div class="om-badge">ॐ</div>
+    <h1 class="start-title">Ganesha Dash</h1>
+    <div class="start-sub">A Ganesh Chaturthi Runner</div>
+    <p class="start-tag">
+      Guide Ganesha down the festival street. Collect modaks and sweets,
+      grab shields, and dodge cars and trucks — traffic gets faster the
+      longer you survive.
+    </p>
+    <div class="how-to">
+      <div class="how-item">
+        <div class="icon">🕹️</div>
+        <div class="label">Move</div>
+        <div class="desc">Swipe left/right to switch lanes</div>
+      </div>
+      <div class="how-item">
+        <div class="icon">⬆️</div>
+        <div class="label">Jump</div>
+        <div class="desc">Swipe up to leap over traffic</div>
+      </div>
+      <div class="how-item">
+        <div class="icon">🛡️</div>
+        <div class="label">Survive</div>
+        <div class="desc">Grab a shield to smash one vehicle safely</div>
+      </div>
+    </div>
+    <button id="start-button">Start Game</button>
+    <div class="credit">🎵 Morya March theme · Best score saved on this device</div>
+  </div>
+</div>
+
+<div id="game-over" class="overlay hidden">
+  <h2 id="game-over-title">Vighnaharta!</h2>
+  <div class="new-best" id="new-best">★ New Best Score ★</div>
+  <div class="final-badge" id="final-badge">Score 0</div>
+  <p id="game-over-copy"></p>
+  <div class="pause-actions" style="margin-top:10px;">
+    <button id="restart-button">Play Again</button>
+    <button id="gameover-menu" class="secondary">Main Menu</button>
+  </div>
+</div>
+
+<div id="pause-overlay" class="overlay hidden">
+  <p>Game Paused</p>
+  <h2>⏸ Paused</h2>
+  <div class="pause-actions">
+    <button id="resume-button">Resume</button>
+    <button id="pause-restart" class="secondary">Restart</button>
+    <button id="pause-menu" class="secondary">Main Menu</button>
+  </div>
+  <div class="credit" style="margin-top:14px;">Press <span class="kbd">Esc</span> to resume</div>
+</div>
+
+<div id="settings-overlay" class="overlay hidden">
+  <div class="settings-card">
+    <h2>⚙ Settings</h2>
+
+    <div class="setting-row">
+      <div class="info">
+        <div class="name">Music</div>
+        <div class="hint">Dhol-tasha festival theme</div>
+      </div>
+      <div class="segmented" id="music-seg">
+        <button data-music="0">Off</button>
+        <button data-music="1">Low</button>
+        <button data-music="2" class="active">Med</button>
+        <button data-music="3">High</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="info">
+        <div class="name">Sound effects</div>
+        <div class="hint">Collect, jump, run, crash</div>
+      </div>
+      <div class="toggle" id="toggle-sound" role="switch" aria-checked="true" tabindex="0"></div>
+    </div>
+
+    <div class="setting-row">
+      <div class="info">
+        <div class="name">Difficulty</div>
+        <div class="hint">Affects speed &amp; spawn rate</div>
+      </div>
+      <div class="segmented" id="difficulty-seg">
+        <button data-diff="easy">Easy</button>
+        <button data-diff="normal" class="active">Normal</button>
+        <button data-diff="hard">Hard</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="info">
+        <div class="name">Vibration</div>
+        <div class="hint">Haptic feedback on hits &amp; pickups</div>
+      </div>
+      <div class="toggle" id="toggle-vibration" role="switch" aria-checked="true" tabindex="0"></div>
+    </div>
+
+    <div class="setting-row">
+      <div class="info">
+        <div class="name">Best score</div>
+        <div class="hint">Currently saved on this device</div>
+      </div>
+      <button id="reset-best" class="danger-btn">Reset</button>
+    </div>
+
+    <button id="settings-close" class="primary-close">Done</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+
+/* =========================================================
+   1. DOM
+   ========================================================= */
+const canvas          = document.querySelector("#game");
+const scoreEl         = document.querySelector("#score");
+const modaksEl        = document.querySelector("#modaks");
+const bestEl          = document.querySelector("#best");
+const message         = document.querySelector("#message");
+const gameOverEl      = document.querySelector("#game-over");
+const gameOverTitle   = document.querySelector("#game-over-title");
+const gameOverCopy    = document.querySelector("#game-over-copy");
+const finalBadge      = document.querySelector("#final-badge");
+const newBestEl       = document.querySelector("#new-best");
+const startButton     = document.querySelector("#start-button");
+const restartButton   = document.querySelector("#restart-button");
+const gameoverMenuBtn = document.querySelector("#gameover-menu");
+
+const musicButton     = document.querySelector("#music-button");
+const soundButton     = document.querySelector("#sound-button");
+const pauseButton     = document.querySelector("#pause-button");
+const settingsButton  = document.querySelector("#settings-button");
+
+const pauseOverlay    = document.querySelector("#pause-overlay");
+const resumeButton    = document.querySelector("#resume-button");
+const pauseRestart    = document.querySelector("#pause-restart");
+const pauseMenuBtn    = document.querySelector("#pause-menu");
+
+const settingsOverlay = document.querySelector("#settings-overlay");
+const settingsClose   = document.querySelector("#settings-close");
+const toggleSound     = document.querySelector("#toggle-sound");
+const toggleVibration = document.querySelector("#toggle-vibration");
+const difficultySeg   = document.querySelector("#difficulty-seg");
+const musicSeg        = document.querySelector("#music-seg");
+const resetBestBtn    = document.querySelector("#reset-best");
+
+/* =========================================================
+   2. SETTINGS
+   ========================================================= */
+const DIFFICULTIES = {
+  easy:   { baseSpeed:  7.5, maxSpeed: 20, speedRamp: 0.30, baseSpawn: 1250, minSpawn: 520, spawnRamp: 10 },
+  normal: { baseSpeed:  9.0, maxSpeed: 26, speedRamp: 0.45, baseSpawn: 1050, minSpawn: 420, spawnRamp: 14 },
+  hard:   { baseSpeed: 11.0, maxSpeed: 31, speedRamp: 0.65, baseSpawn:  900, minSpawn: 340, spawnRamp: 19 },
+};
+
+const SETTINGS = (() => {
+  let raw = {};
+  try { raw = JSON.parse(localStorage.getItem("ganeshaDashSettings") || "{}"); } catch {}
+  return {
+    sound:      raw.sound      !== false,
+    vibration:  raw.vibration  !== false,
+    difficulty: DIFFICULTIES[raw.difficulty] ? raw.difficulty : "normal",
+    musicLevel: typeof raw.musicLevel === "number" ? Math.max(0, Math.min(3, raw.musicLevel | 0)) : 2,
+  };
+})();
+
+function saveSettings() {
+  try { localStorage.setItem("ganeshaDashSettings", JSON.stringify(SETTINGS)); } catch {}
+}
+
+/* =========================================================
+   3. CONFIG
+   ========================================================= */
+const CFG = {
+  laneWidth:   2.6,
+  laneCount:   4,
+  playerZ:     2.7,
+  spawnZ:     -60,
+  despawnZ:    14,
+
+  baseSpeed:   9.0,
+  maxSpeed:   26.0,
+  speedRamp:   0.45,
+  baseSpawn:  1050,
+  minSpawn:    420,
+  spawnRamp:    14,
+
+  carSpeedMul:   1.55,
+  truckSpeedMul: 1.20,
+  pickupSpeedMul: 1.00,
+
+  carBodyW:  1.90, carBodyH: 1.00, carBodyD: 3.20, carWheelR: 0.45,
+  truckCabW: 2.10, truckCabH: 1.80, truckCabD: 1.90,
+  truckBoxW: 2.35, truckBoxH: 2.60, truckBoxD: 4.80,
+  truckWheelR: 0.58, truckHalfD: 3.10,
+
+  jumpVel: 9.2, gravity: -25.0, clearHeight: 1.05,
+  laneSmooth: 13,
+};
+
+const LANE_MID = (CFG.laneCount - 1) / 2;
+const laneX = lane => (lane - LANE_MID) * CFG.laneWidth;
+
+function applyDifficulty() {
+  const d = DIFFICULTIES[SETTINGS.difficulty] || DIFFICULTIES.normal;
+  CFG.baseSpeed = d.baseSpeed;
+  CFG.maxSpeed  = d.maxSpeed;
+  CFG.speedRamp = d.speedRamp;
+  CFG.baseSpawn = d.baseSpawn;
+  CFG.minSpawn  = d.minSpawn;
+  CFG.spawnRamp = d.spawnRamp;
+}
+applyDifficulty();
+
+/* =========================================================
+   4. STATE
+   ========================================================= */
+const state = {
+  running: false, paused: false,
+  raf: 0, last: 0,
+  elapsed: 0, score: 0, treats: 0,
+  best: Number(localStorage.getItem("ganeshaDashBest") || 0),
+  lane: 1, targetLane: 1,
+  jumpY: 0, jumpVel: 0, shield: 0,
+  speed: CFG.baseSpeed, spawnTimer: 0,
+  distance: 0, runPhase: 0, lastStepIndex: 0,
+  entities: [], scenery: [],
+};
+bestEl.textContent = state.best;
+
+/* =========================================================
+   5. AUDIO ENGINE
+   ========================================================= */
+let audioCtx = null;
+let sfxGain = null;
+
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  audioCtx = new AC();
+  sfxGain = audioCtx.createGain();
+  sfxGain.gain.value = 0.85;
+  sfxGain.connect(audioCtx.destination);
+  return audioCtx;
+}
+
+function unlockAudio() {
+  const ctx = ensureAudio();
+  if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+  if (ctx && ctx.state === "running" && state.running && !state.paused && SETTINGS.musicLevel > 0) {
+    startMusic();
+  }
+}
+
+const _noiseCache = new Map();
+function noiseBuffer(dur) {
+  const key = dur.toFixed(3);
+  if (_noiseCache.has(key)) return _noiseCache.get(key);
+  const len = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  _noiseCache.set(key, buf);
+  return buf;
+}
+
+function tone(freq, dur, type = "sine", vol = 0.05, slideTo = null) {
+  if (!audioCtx || !SETTINGS.sound || audioCtx.state !== "running") return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + Math.min(0.02, dur * 0.3));
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain).connect(sfxGain);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.05);
+}
+
+function noiseBurst(dur, vol, filterFreq, type = "lowpass") {
+  if (!audioCtx || !SETTINGS.sound || audioCtx.state !== "running") return;
+  const t0 = audioCtx.currentTime;
+  const src = audioCtx.createBufferSource();
+  src.buffer = noiseBuffer(dur);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = type;
+  filter.frequency.value = filterFreq;
+  filter.Q.value = 1.2;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, t0);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(filter).connect(gain).connect(sfxGain);
+  src.start(t0);
+  src.stop(t0 + dur + 0.02);
+}
+
+function buzz(ms) {
+  if (!SETTINGS.vibration) return;
+  if (navigator.vibrate) { try { navigator.vibrate(ms); } catch {} }
+}
+
+function sfxCollectModak() {
+  tone(1046.50, 0.09, "sine", 0.075);
+  setTimeout(() => tone(1567.98, 0.16, "sine", 0.065), 55);
+  setTimeout(() => tone(2093.00, 0.10, "sine", 0.035), 120);
+  buzz(15);
+}
+function sfxCollectSweet() {
+  tone(880.00, 0.09, "triangle", 0.065);
+  setTimeout(() => tone(1174.66, 0.14, "triangle", 0.055), 55);
+  buzz(12);
+}
+function sfxJump() {
+  tone(260, 0.20, "sine", 0.065, 780);
+  noiseBurst(0.10, 0.025, 1800, "highpass");
+  buzz(8);
+}
+function sfxStep() { noiseBurst(0.045, 0.035, 420, "lowpass"); }
+function sfxMove() { tone(560, 0.06, "sine", 0.03, 760); }
+function sfxShieldPickup() {
+  tone(523.25, 0.09, "sine", 0.06);
+  setTimeout(() => tone(783.99, 0.10, "sine", 0.06), 55);
+  setTimeout(() => tone(1046.50, 0.15, "sine", 0.05), 110);
+  buzz(20);
+}
+function sfxShieldBreak() {
+  tone(320, 0.20, "square", 0.07, 90);
+  noiseBurst(0.18, 0.05, 900, "highpass");
+  buzz(30);
+}
+function sfxCrash() {
+  tone(340, 0.55, "sawtooth", 0.09, 70);
+  noiseBurst(0.35, 0.07, 600, "lowpass");
+  buzz([40, 40, 80]);
+}
+function sfxStart() {
+  tone(523.25, 0.10, "triangle", 0.06);
+  setTimeout(() => tone(659.25, 0.10, "triangle", 0.06), 90);
+  setTimeout(() => tone(783.99, 0.18, "triangle", 0.06), 180);
+}
+
+/* =========================================================
+   6. MUSIC — "Morya March"
+   ========================================================= */
+const MUSIC = {
+  root: 146.83,
+  scale: [0, 2, 3, 5, 7, 8, 10],
+  melody: [
+     0,-1, 0, 2, 3,-1, 4,-1, 3,-1, 2,-1, 0,-1,-1,-1,
+     4,-1, 4, 6, 7,-1, 6,-1, 5,-1, 4,-1, 3,-1,-1,-1,
+     2,-1, 2, 3, 4,-1, 5,-1, 4,-1, 3,-1, 2,-1,-1,-1,
+     0,-1, 2,-1, 3,-1, 4,-1, 4, 3, 2, 1, 0,-1,-1,-1,
+  ],
+  dhol:  [1, 0, .5, 0,  1, 0, .5, 0,  1, 0, .5, 0,  1, .5, .5, 1 ],
+  tasha: [0,.6, 0,.6,  0,.6, 0,.6,  0,.6, 0,.6,  0,.6,.9,.6],
+  clap:  [0, 0,  0, 0, .7, 0,  0, 0,  0, 0,  0, 0, .7, 0,  0, 0 ],
+  bell:  [1, 0,  0, 0,  0, 0,  0, 0,  0, 0,  0, 0,  0, 0,  0, 0 ],
+};
+
+const music = {
+  gain: null,
+  playing: false,
+  schedulerId: null,
+  nextNoteTime: 0,
+  currentStep: 0,
+  bpm: 108,
+  droneNodes: null,
+};
+
+function musicVolumeValue(level) {
+  const table = [0, 0.18, 0.34, 0.55];
+  return table[Math.max(0, Math.min(3, level | 0))];
+}
+
+function musicDegreeToHz(degree) {
+  const oct = Math.floor(degree / 7);
+  const idx = ((degree % 7) + 7) % 7;
+  const semis = MUSIC.scale[idx] + oct * 12;
+  return MUSIC.root * Math.pow(2, semis / 12);
+}
+
+function ensureMusicBus() {
+  if (music.gain) return music.gain;
+  if (!audioCtx) return null;
+  music.gain = audioCtx.createGain();
+  music.gain.gain.value = musicVolumeValue(SETTINGS.musicLevel);
+  music.gain.connect(audioCtx.destination);
+  return music.gain;
+}
+
+function instDhol(time, accent) {
+  if (!music.gain) return;
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  const f0 = accent ? 115 : 92;
+  const f1 = accent ?  42 : 55;
+  osc.frequency.setValueAtTime(f0, time);
+  osc.frequency.exponentialRampToValueAtTime(f1, time + 0.14);
+  const g = audioCtx.createGain();
+  const peak = accent ? 0.55 : 0.28;
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(peak, time + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.32);
+  osc.connect(g).connect(music.gain);
+  osc.start(time); osc.stop(time + 0.36);
+
+  const src = audioCtx.createBufferSource();
+  src.buffer = noiseBuffer(0.06);
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 750;
+  const ng = audioCtx.createGain();
+  ng.gain.setValueAtTime(accent ? 0.14 : 0.07, time);
+  ng.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+  src.connect(lp).connect(ng).connect(music.gain);
+  src.start(time); src.stop(time + 0.08);
+}
+
+function instTasha(time, accent) {
+  if (!music.gain) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = noiseBuffer(0.10);
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = "bandpass"; bp.frequency.value = 2600; bp.Q.value = 2.2;
+  const g = audioCtx.createGain();
+  const peak = accent ? 0.22 : 0.12;
+  g.gain.setValueAtTime(peak, time);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
+  src.connect(bp).connect(g).connect(music.gain);
+  src.start(time); src.stop(time + 0.10);
+
+  const osc = audioCtx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(420, time);
+  osc.frequency.exponentialRampToValueAtTime(320, time + 0.05);
+  const og = audioCtx.createGain();
+  og.gain.setValueAtTime(peak * 0.6, time);
+  og.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
+  osc.connect(og).connect(music.gain);
+  osc.start(time); osc.stop(time + 0.08);
+}
+
+function instClap(time) {
+  if (!music.gain) return;
+  for (let i = 0; i < 3; i++) {
+    const t = time + i * 0.009;
+    const src = audioCtx.createBufferSource();
+    src.buffer = noiseBuffer(0.15);
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = "highpass"; hp.frequency.value = 1200;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(i === 0 ? 0.18 : 0.12, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    src.connect(hp).connect(g).connect(music.gain);
+    src.start(t); src.stop(t + 0.08);
+  }
+}
+
+function instBell(time) {
+  if (!music.gain) return;
+  const partials = [
+    { f:  880, g: 0.13, d: 1.6 },
+    { f: 1320, g: 0.075, d: 1.2 },
+    { f: 1760, g: 0.042, d: 0.9 },
+    { f: 2640, g: 0.018, d: 0.6 },
+  ];
+  for (const p of partials) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = p.f;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(p.g, time + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + p.d);
+    osc.connect(g).connect(music.gain);
+    osc.start(time); osc.stop(time + p.d + 0.05);
+  }
+}
+
+function instShehnai(time, freq, dur) {
+  if (!music.gain) return;
+
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = "triangle";
+  osc1.frequency.setValueAtTime(freq, time);
+
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = "sawtooth";
+  osc2.frequency.setValueAtTime(freq * 1.006, time);
+
+  const vib = audioCtx.createOscillator();
+  vib.type = "sine";
+  vib.frequency.value = 5.8;
+  const vibGain = audioCtx.createGain();
+  vibGain.gain.value = freq * 0.009;
+  vib.connect(vibGain);
+  vibGain.connect(osc1.frequency);
+  vibGain.connect(osc2.frequency);
+
+  const g1 = audioCtx.createGain();
+  g1.gain.setValueAtTime(0.0001, time);
+  g1.gain.exponentialRampToValueAtTime(0.09, time + 0.025);
+  g1.gain.setValueAtTime(0.09, time + dur * 0.65);
+  g1.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+  const g2 = audioCtx.createGain();
+  g2.gain.setValueAtTime(0.0001, time);
+  g2.gain.exponentialRampToValueAtTime(0.022, time + 0.025);
+  g2.gain.setValueAtTime(0.022, time + dur * 0.65);
+  g2.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 3400; lp.Q.value = 0.8;
+
+  osc1.connect(g1); osc2.connect(g2);
+  g1.connect(lp); g2.connect(lp);
+  lp.connect(music.gain);
+
+  osc1.start(time); osc2.start(time); vib.start(time);
+  osc1.stop(time + dur + 0.05);
+  osc2.stop(time + dur + 0.05);
+  vib.stop(time + dur + 0.05);
+}
+
+function startDrone() {
+  if (!music.gain || music.droneNodes) return;
+  const t = audioCtx.currentTime;
+
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = "sine";
+  osc1.frequency.value = MUSIC.root / 2;
+
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = "sine";
+  osc2.frequency.value = MUSIC.root * 0.75;
+
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.028, t + 1.4);
+
+  const lfo = audioCtx.createOscillator();
+  lfo.type = "sine";
+  lfo.frequency.value = 0.27;
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 0.010;
+  lfo.connect(lfoGain);
+  lfoGain.connect(g.gain);
+
+  osc1.connect(g); osc2.connect(g);
+  g.connect(music.gain);
+
+  osc1.start(t); osc2.start(t); lfo.start(t);
+  music.droneNodes = { osc1, osc2, g, lfo };
+}
+
+function stopDrone() {
+  const n = music.droneNodes;
+  if (!n || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  try {
+    n.g.gain.cancelScheduledValues(t);
+    n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    n.osc1.stop(t + 0.4);
+    n.osc2.stop(t + 0.4);
+    n.lfo.stop(t + 0.4);
+  } catch {}
+  music.droneNodes = null;
+}
+
+const STEPS_PER_BAR = 16;
+const TOTAL_STEPS = 64;
+
+function scheduleMusicStep(step, time) {
+  const inBar = step % STEPS_PER_BAR;
+  const barIdx = Math.floor(step / STEPS_PER_BAR);
+
+  const d = MUSIC.dhol[inBar];
+  if (d > 0) instDhol(time, d >= 1);
+
+  const tk = MUSIC.tasha[inBar];
+  if (tk > 0) instTasha(time, tk >= 0.7);
+
+  if (MUSIC.clap[inBar] > 0) instClap(time);
+
+  if (MUSIC.bell[inBar] > 0 && barIdx % 2 === 0) instBell(time);
+
+  const deg = MUSIC.melody[step];
+  if (deg >= 0) {
+    const stepDur = 60 / music.bpm / 4;
+    instShehnai(time, musicDegreeToHz(deg), stepDur * 1.4);
+  }
+}
+
+function musicTick() {
+  if (!music.playing || !audioCtx || !music.gain) return;
+  if (audioCtx.state !== "running") return;
+  if (SETTINGS.musicLevel === 0) return;
+  const stepDur = 60 / music.bpm / 4;
+  const lookahead = 0.15;
+  let guard = 0;
+  while (music.nextNoteTime < audioCtx.currentTime + lookahead && guard++ < 32) {
+    scheduleMusicStep(music.currentStep, music.nextNoteTime);
+    music.nextNoteTime += stepDur;
+    music.currentStep = (music.currentStep + 1) % TOTAL_STEPS;
+  }
+}
+
+function startMusic() {
+  if (!audioCtx || SETTINGS.musicLevel === 0 || music.playing) return;
+  ensureMusicBus();
+  if (!music.gain) return;
+
+  const boot = () => {
+    if (music.playing || SETTINGS.musicLevel === 0) return;
+    music.playing = true;
+    music.currentStep = 0;
+    music.nextNoteTime = audioCtx.currentTime + 0.08;
+    startDrone();
+    if (music.schedulerId) clearInterval(music.schedulerId);
+    music.schedulerId = window.setInterval(musicTick, 25);
+  };
+
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().then(boot).catch(err => console.warn("Music unavailable:", err));
+  } else {
+    boot();
+  }
+}
+
+function stopMusic() {
+  if (music.schedulerId) {
+    clearInterval(music.schedulerId);
+    music.schedulerId = null;
+  }
+  music.playing = false;
+  if (audioCtx) stopDrone();
+}
+
+function setMusicLevel(level) {
+  SETTINGS.musicLevel = Math.max(0, Math.min(3, level | 0));
+  saveSettings();
+  if (music.gain && audioCtx) {
+    music.gain.gain.setTargetAtTime(musicVolumeValue(SETTINGS.musicLevel), audioCtx.currentTime, 0.08);
+  }
+  if (SETTINGS.musicLevel === 0) {
+    stopMusic();
+  } else if (state.running && !state.paused) {
+    startMusic();
+  }
+  syncSettingsUI();
+}
+
+/* =========================================================
+   7. RENDERER / SCENE / CAMERA
+   ========================================================= */
+const HORIZON = 0xd97c68;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+scene.background = makeSkyTexture();
+scene.fog = new THREE.Fog(HORIZON, 36, 100);
+
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 240);
+camera.position.set(0, 5.8, 13.5);
+camera.lookAt(0, 2.0, -14);
+
+function makeSkyTexture() {
+  const c = document.createElement("canvas");
+  c.width = 4; c.height = 256;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.00, "#241436");
+  g.addColorStop(0.28, "#5e3358");
+  g.addColorStop(0.44, "#b05f68");
+  g.addColorStop(0.50, "#d97c68");
+  g.addColorStop(0.60, "#eda06b");
+  g.addColorStop(0.78, "#c9754f");
+  g.addColorStop(1.00, "#6b3a30");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  return tex;
+}
+
+scene.add(new THREE.HemisphereLight(0xffe9bd, 0x3d254f, 1.9));
+
+const sun = new THREE.DirectionalLight(0xffe1b0, 3.2);
+sun.position.set(-14, 20, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -30;  sun.shadow.camera.right  = 30;
+sun.shadow.camera.top  =  36;  sun.shadow.camera.bottom = -14;
+sun.shadow.camera.near =   1;  sun.shadow.camera.far    =  80;
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.02;
+scene.add(sun, sun.target);
+
+const rimLight = new THREE.PointLight(0xff9f68, 14, 36, 2);
+rimLight.position.set(0, 6, -10);
+scene.add(rimLight);
+
+let resizePending = false;
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(w, h, false);
+  const aspect = w / h;
+  camera.aspect = aspect;
+  if (aspect >= 1.4)       { camera.position.z = 13.5; camera.position.y = 5.8; }
+  else if (aspect >= 1.0)  { camera.position.z = 14.5; camera.position.y = 6.2; }
+  else if (aspect >= 0.75) { camera.position.z = 16.0; camera.position.y = 6.8; }
+  else if (aspect >= 0.55) { camera.position.z = 18.0; camera.position.y = 7.4; }
+  else                     { camera.position.z = 21.0; camera.position.y = 8.2; }
+  camera.updateProjectionMatrix();
+  if (!state.running) renderer.render(scene, camera);
+}
+function scheduleResize() {
+  if (resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(() => { resizePending = false; resize(); });
+}
+window.addEventListener("resize", scheduleResize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 150));
+resize();
+
+/* =========================================================
+   8. MATERIALS
+   ========================================================= */
+function makeAsphaltTexture(size = 256) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#2b2836";
+  ctx.fillRect(0, 0, size, size);
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * 30;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(5, 44);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return tex;
+}
+
+const roadTex = makeAsphaltTexture();
+const ROAD_LENGTH = 180;
+const ROAD_REPEAT_Y = 44;
+const ROAD_UNIT_PER_TILE = ROAD_LENGTH / ROAD_REPEAT_Y;
+
+const ROAD_WIDTH = 13.5;
+const CURB_X = ROAD_WIDTH / 2 + 0.05;
+
+const materials = {
+  road:      new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.95, metalness: 0.02 }),
+  lane:      new THREE.MeshStandardMaterial({ color: 0xe9b84e, emissive: 0x5c3a18, emissiveIntensity: 0.4, roughness: 0.6 }),
+  curb:      new THREE.MeshStandardMaterial({ color: 0xd9a45a, roughness: 0.8 }),
+  ground:    new THREE.MeshStandardMaterial({ color: 0xa85742, roughness: 1 }),
+  trim:      new THREE.MeshStandardMaterial({ color: 0xf4bf59, metalness: 0.3, roughness: 0.4 }),
+  gold:      new THREE.MeshStandardMaterial({ color: 0xffcd63, metalness: 0.7, roughness: 0.25 }),
+  dark:      new THREE.MeshStandardMaterial({ color: 0x28192b, roughness: 0.9 }),
+  body:      new THREE.MeshStandardMaterial({ color: 0xe88945, roughness: 0.75 }),
+  face:      new THREE.MeshStandardMaterial({ color: 0xf1a052, roughness: 0.75 }),
+  ear:       new THREE.MeshStandardMaterial({ color: 0xd56e3c, roughness: 0.8 }),
+  glass:     new THREE.MeshStandardMaterial({ color: 0x22303f, metalness: 0.6, roughness: 0.15 }),
+  tire:      new THREE.MeshStandardMaterial({ color: 0x15131c, roughness: 1 }),
+  rim:       new THREE.MeshStandardMaterial({ color: 0xbfc4cc, metalness: 0.9, roughness: 0.25 }),
+  headlight: new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffd27a, emissiveIntensity: 3 }),
+  taillight: new THREE.MeshStandardMaterial({ color: 0xff4d4d, emissive: 0xff2020, emissiveIntensity: 2 }),
+  beam:      new THREE.MeshBasicMaterial({ color: 0xffe6a8, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+  modak:     new THREE.MeshStandardMaterial({ color: 0xffc857, emissive: 0x6c3a0f, emissiveIntensity: 0.6, roughness: 0.42, metalness: 0.18, flatShading: true }),
+  modakTip:  new THREE.MeshStandardMaterial({ color: 0xfff0c2, emissive: 0x7a4a10, emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.35 }),
+  laddu:     new THREE.MeshStandardMaterial({ color: 0xf5a623, emissive: 0x6a3a0a, emissiveIntensity: 0.35, roughness: 0.6, metalness: 0.1 }),
+  jalebi:    new THREE.MeshStandardMaterial({ color: 0xe67e22, emissive: 0x5a2800, emissiveIntensity: 0.4, roughness: 0.55, metalness: 0.1 }),
+  barfi:     new THREE.MeshStandardMaterial({ color: 0xf5e6c8, emissive: 0x3a2a10, emissiveIntensity: 0.18, roughness: 0.5, metalness: 0.2 }),
+  shield:    new THREE.MeshStandardMaterial({ color: 0x70e1df, emissive: 0x247b89, emissiveIntensity: 1.5, transparent: true, opacity: 0.88, metalness: 0.4, roughness: 0.2 }),
+  flower:    new THREE.MeshStandardMaterial({ color: 0xe84f55, roughness: 0.7 }),
+  leaf:      new THREE.MeshStandardMaterial({ color: 0x39714e, roughness: 0.9 }),
+  lamp:      new THREE.MeshStandardMaterial({ color: 0xffbd55, emissive: 0xff7a35, emissiveIntensity: 2.5 }),
+  truckCargo:new THREE.MeshStandardMaterial({ color: 0xd7d9dd, metalness: 0.4, roughness: 0.55 }),
+  truckStripe:new THREE.MeshStandardMaterial({ color: 0xd83f50, roughness: 0.5 }),
+};
+
+const CAR_COLORS   = ["#d83f50", "#3f7ad8", "#e0a13a", "#4fa86a", "#a45ad8", "#cfd3da", "#e07b3a"];
+const TRUCK_COLORS = ["#1e6d9c", "#8c2f39", "#2d6b3f", "#7a4a1e", "#4a2d6b", "#3a3a3a"];
+const carMaterials   = CAR_COLORS.map(c   => new THREE.MeshStandardMaterial({ color: c, metalness: 0.4,  roughness: 0.42 }));
+const truckMaterials = TRUCK_COLORS.map(c => new THREE.MeshStandardMaterial({ color: c, metalness: 0.45, roughness: 0.4  }));
+
+const carWheelGeo = new THREE.CylinderGeometry(CFG.carWheelR, CFG.carWheelR, 0.28, 18); carWheelGeo.rotateZ(Math.PI / 2);
+const carHubGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.30, 12); carHubGeo.rotateZ(Math.PI / 2);
+const truckWheelGeo = new THREE.CylinderGeometry(CFG.truckWheelR, CFG.truckWheelR, 0.34, 18); truckWheelGeo.rotateZ(Math.PI / 2);
+const truckHubGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.36, 12); truckHubGeo.rotateZ(Math.PI / 2);
+
+const carBeamGeo = new THREE.ConeGeometry(0.55, 4.5, 10, 1, true);
+carBeamGeo.translate(0, -2.25, 0); carBeamGeo.rotateX(-Math.PI / 2);
+const truckBeamGeo = new THREE.ConeGeometry(0.62, 5.5, 10, 1, true);
+truckBeamGeo.translate(0, -2.75, 0); truckBeamGeo.rotateX(-Math.PI / 2);
+
+/* =========================================================
+   9. HELPERS
+   ========================================================= */
+function mesh(geo, mat, parent, pos = [0, 0, 0], cast = true, receive = false) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(pos[0], pos[1], pos[2]);
+  m.castShadow = cast;
+  m.receiveShadow = receive;
+  parent.add(m);
+  return m;
+}
+
+/* =========================================================
+   10. STATIC WORLD
+   ========================================================= */
+const road = mesh(new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH), materials.road, scene, [0, 0, -75], false, true);
+road.rotation.x = -Math.PI / 2;
+
+const ground = mesh(new THREE.PlaneGeometry(300, 300), materials.ground, scene, [0, -0.08, -75], false, true);
+ground.rotation.x = -Math.PI / 2;
+
+for (const side of [-1, 1]) {
+  mesh(new THREE.BoxGeometry(0.26, 0.16, ROAD_LENGTH), materials.curb, scene, [side * CURB_X, 0.07, -75], false, true);
+}
+
+function addScenery(group, startZ, wrapTop, span) {
+  group.position.z = startZ;
+  scene.add(group);
+  state.scenery.push({ group, z: startZ, wrapTop, span });
+}
+
+function createStreet() {
+  const SPACING = 9, COUNT = 15, SPAN = SPACING * COUNT, TOP = 20;
+  const SIDE_X = CURB_X + 1.6;
+  for (let i = 0; i < COUNT; i++) {
+    const side = i % 2 ? 1 : -1;
+    const z = TOP - i * SPACING;
+    const g = new THREE.Group();
+    const h = 3 + (i % 3);
+    mesh(new THREE.BoxGeometry(3.8, h, 3.9),
+         new THREE.MeshStandardMaterial({ color: i % 2 ? "#49304b" : "#65364a", roughness: 0.85 }),
+         g, [side * SIDE_X, h / 2, 0], true, true);
+    mesh(new THREE.BoxGeometry(4.1, 0.18, 4.2), materials.trim, g, [side * SIDE_X, h + 0.09, 0], false);
+    mesh(new THREE.ConeGeometry(1.4, 1.4, 4), materials.gold, g, [side * SIDE_X, h + 0.9, 0], false);
+    mesh(new THREE.BoxGeometry(3.9, 0.7, 0.14), i % 2 ? materials.flower : materials.trim, g, [side * SIDE_X, 1.6, side * -1.97], false);
+    mesh(new THREE.CylinderGeometry(0.07, 0.1, 4.4, 8), materials.dark, g, [side * (CURB_X + 0.4), 2.2, 0], false);
+    mesh(new THREE.SphereGeometry(0.22, 12, 8), materials.lamp, g, [side * (CURB_X + 0.4), 4.45, 0], false);
+    for (let j = 0; j < 5; j++) {
+      const f = mesh(new THREE.SphereGeometry(0.12, 8, 6), j % 2 ? materials.flower : materials.gold,
+                     g, [side * (CURB_X - 0.4 + j * 0.45), 4.55 + Math.sin(j) * 0.25, 0], false);
+      f.scale.y = 0.75;
+    }
+    const tree = new THREE.Group();
+    tree.position.set(side * (SIDE_X - 1.4), 0, 0.8);
+    g.add(tree);
+    mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.8, 8), materials.ear, tree, [0, 0.9, 0], true);
+    mesh(new THREE.SphereGeometry(1.05, 12, 8), materials.leaf, tree, [0, 2.1, 0], true);
+    addScenery(g, z, TOP, SPAN);
+  }
+
+  const gateway = new THREE.Group();
+  const GW = CURB_X + 0.6;
+  mesh(new THREE.BoxGeometry(0.8, 6.0, 0.9), materials.trim, gateway, [-GW, 3.0, 0], true);
+  mesh(new THREE.BoxGeometry(0.8, 6.0, 0.9), materials.trim, gateway, [ GW, 3.0, 0], true);
+  mesh(new THREE.BoxGeometry(GW * 2 + 1, 0.7, 1.0), materials.gold, gateway, [0, 5.9, 0], true);
+  mesh(new THREE.ConeGeometry(1.55, 2.3, 5), materials.flower, gateway, [0, 7.25, 0], true);
+  mesh(new THREE.ConeGeometry(0.85, 1.4, 5), materials.gold, gateway, [-2.5, 6.7, 0], false);
+  mesh(new THREE.ConeGeometry(0.85, 1.4, 5), materials.gold, gateway, [ 2.5, 6.7, 0], false);
+  for (let i = -4; i <= 4; i++) {
+    mesh(new THREE.SphereGeometry(0.14, 8, 6), i % 2 ? materials.flower : materials.gold, gateway, [i * 1.15, 5.25, 0.56], false);
+  }
+  addScenery(gateway, -48, 20, 120);
+}
+
+function createLaneDashes() {
+  const dividerX = [-CFG.laneWidth, 0, CFG.laneWidth];
+  const SPACING = 6, COUNT = 22, SPAN = SPACING * COUNT, TOP = 18;
+  for (let i = 0; i < COUNT; i++) {
+    const g = new THREE.Group();
+    for (const x of dividerX) {
+      mesh(new THREE.BoxGeometry(0.12, 0.03, 3.0), materials.lane, g, [x, 0.02, 0], false);
+    }
+    addScenery(g, TOP - i * SPACING, TOP, SPAN);
+  }
+}
+
+createStreet();
+createLaneDashes();
+
+/* =========================================================
+   11. PLAYER
+   ========================================================= */
+function makeGanesha() {
+  const root = new THREE.Group();
+  root.position.set(0, 0.08, CFG.playerZ);
+  root.scale.setScalar(0.72);
+  root.rotation.y = Math.PI;
+  scene.add(root);
+
+  const body = mesh(new THREE.SphereGeometry(1.05, 20, 14), materials.body, root, [0, 1.35, 0]);
+  body.scale.set(0.82, 1.2, 0.68);
+
+  const head = mesh(new THREE.SphereGeometry(0.9, 20, 14), materials.face, root, [0, 2.65, 0]);
+  head.scale.set(1.05, 0.92, 0.82);
+
+  mesh(new THREE.SphereGeometry(0.48, 16, 12), materials.ear, root, [-0.82, 2.62, 0]).scale.set(0.5, 1.35, 0.55);
+  mesh(new THREE.SphereGeometry(0.48, 16, 12), materials.ear, root, [ 0.82, 2.62, 0]).scale.set(0.5, 1.35, 0.55);
+
+  mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.18, 20), materials.gold, root, [0, 3.45, 0], false);
+  const crown = mesh(new THREE.ConeGeometry(0.55, 0.5, 20), materials.gold, root, [0, 3.72, 0], false);
+  crown.rotation.y = Math.PI / 4;
+
+  mesh(new THREE.SphereGeometry(0.075, 10, 8), materials.dark, root, [-0.3, 2.7, 0.78], false);
+  mesh(new THREE.SphereGeometry(0.075, 10, 8), materials.dark, root, [ 0.3, 2.7, 0.78], false);
+
+  const trunk = mesh(new THREE.CapsuleGeometry(0.15, 0.65, 8, 12), materials.ear, root, [0.08, 2.28, 0.73]);
+  trunk.rotation.x = -0.35;
+
+  const arms = [-1, 1].map(side => {
+    const arm = mesh(new THREE.CapsuleGeometry(0.13, 0.9, 8, 10), materials.face, root, [side * 0.9, 1.65, -0.05]);
+    arm.geometry.rotateZ(Math.PI / 2);
+    return arm;
+  });
+
+  const legs = [-1, 1].map(side =>
+    mesh(new THREE.CapsuleGeometry(0.18, 0.72, 8, 10), materials.gold, root, [side * 0.36, 0.35, 0])
+  );
+
+  const shield = new THREE.Mesh(new THREE.SphereGeometry(1.9, 24, 16), materials.shield);
+  shield.scale.z = 0.35;
+  shield.visible = false;
+  shield.position.y = 1.9;
+  root.add(shield);
+
+  return { root, arms, legs, shield };
+}
+
+const ganesha = makeGanesha();
+
+/* =========================================================
+   12. ENTITY BUILDERS
+   ========================================================= */
+const modakGeo = (() => {
+  const samples = [
+    [0.00, 0.00], [0.30, 0.00], [0.46, 0.03], [0.58, 0.09],
+    [0.66, 0.18], [0.71, 0.30], [0.71, 0.42], [0.68, 0.55],
+    [0.62, 0.67], [0.52, 0.78], [0.39, 0.88], [0.24, 0.95],
+    [0.11, 0.99], [0.03, 1.02], [0.00, 1.03],
+  ];
+  const pts = samples.map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y * 1.05));
+  return new THREE.LatheGeometry(pts, 12);
+})();
+const modakBaseGeo = new THREE.TorusGeometry(0.30, 0.055, 8, 20);
+const modakTipGeo = new THREE.SphereGeometry(0.075, 8, 6);
+const modakCapGeo = new THREE.SphereGeometry(0.10, 10, 8);
+
+function buildModak(root) {
+  const g = new THREE.Group();
+  g.position.y = 0.55;
+  root.add(g);
+  const body = new THREE.Mesh(modakGeo, materials.modak);
+  body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  mesh(modakCapGeo, materials.modakTip, g, [0, 1.09, 0], true);
+  mesh(modakTipGeo, materials.gold, g, [0, 1.16, 0], false);
+  const base = mesh(modakBaseGeo, materials.gold, g, [0, 0.02, 0], false);
+  base.rotation.x = Math.PI / 2;
+}
+
+function buildSweet(root) {
+  const variant = Math.floor(Math.random() * 3);
+  const g = new THREE.Group();
+  root.add(g);
+  if (variant === 0) {
+    const mat = materials.laddu;
+    mesh(new THREE.SphereGeometry(0.34, 12, 10), mat, g, [0, 1.0, 0], true);
+    const offsets = [
+      [ 0.24, 0.10, 0.00], [-0.24, 0.10, 0.00],
+      [ 0.00, 0.10, 0.24], [ 0.00, 0.10,-0.24],
+      [ 0.16, 0.26, 0.16], [-0.16, 0.26, 0.16],
+      [ 0.16, 0.26,-0.16], [-0.16, 0.26,-0.16],
+    ];
+    for (const [x, y, z] of offsets) mesh(new THREE.SphereGeometry(0.17, 10, 8), mat, g, [x, 1.0 + y, z], false);
+    mesh(new THREE.SphereGeometry(0.07, 8, 6), materials.rim, g, [0, 1.42, 0], false);
+  } else if (variant === 1) {
+    const mat = materials.jalebi;
+    const t1 = mesh(new THREE.TorusGeometry(0.48, 0.14, 12, 22), mat, g, [0, 1.0, 0], true); t1.rotation.x = Math.PI / 2;
+    const t2 = mesh(new THREE.TorusGeometry(0.30, 0.12, 12, 18), mat, g, [0.06, 1.0, 0.06], false); t2.rotation.x = Math.PI / 2;
+    const t3 = mesh(new THREE.TorusGeometry(0.15, 0.10, 10, 14), mat, g, [0.12, 1.0, 0.12], false); t3.rotation.x = Math.PI / 2;
+  } else {
+    const mat = materials.barfi;
+    const d = mesh(new THREE.OctahedronGeometry(0.46, 0), mat, g, [0, 1.0, 0], true);
+    d.rotation.y = Math.PI / 4;
+    d.scale.set(1.0, 0.85, 1.0);
+    mesh(new THREE.TorusGeometry(0.34, 0.025, 8, 20), materials.rim, g, [0, 1.0, 0], false);
+  }
+}
+
+function buildShield(root) {
+  const g = new THREE.Group();
+  root.add(g);
+  const ring = mesh(new THREE.TorusGeometry(0.60, 0.13, 12, 26), materials.shield, g, [0, 1.0, 0], true);
+  ring.rotation.x = Math.PI / 2;
+  const inner = mesh(new THREE.TorusGeometry(0.36, 0.07, 10, 20), materials.shield, g, [0, 1.0, 0], false);
+  inner.rotation.x = Math.PI / 2;
+}
+
+function buildCar(root) {
+  const bodyMat = carMaterials[Math.floor(Math.random() * carMaterials.length)];
+  const W = CFG.carBodyW, H = CFG.carBodyH, D = CFG.carBodyD;
+  mesh(new THREE.BoxGeometry(W, H, D), bodyMat, root, [0, 0.80, 0], true);
+  mesh(new THREE.BoxGeometry(W * 0.82, 0.72, D * 0.48), bodyMat, root, [0, 1.55, -0.10], true);
+  mesh(new THREE.BoxGeometry(W * 0.68, 0.52, D * 0.05), materials.glass, root, [0, 1.60,  D * 0.22], false);
+  mesh(new THREE.BoxGeometry(W * 0.68, 0.52, D * 0.05), materials.glass, root, [0, 1.60, -D * 0.32], false);
+  mesh(new THREE.BoxGeometry(0.05, 0.52, D * 0.42), materials.glass, root, [ W * 0.42, 1.60, -0.10], false);
+  mesh(new THREE.BoxGeometry(0.05, 0.52, D * 0.42), materials.glass, root, [-W * 0.42, 1.60, -0.10], false);
+  mesh(new THREE.BoxGeometry(W * 0.86, 0.10, D * 0.5), materials.trim, root, [0, 1.95, -0.10], false);
+  const wheels = [];
+  const wx = W * 0.52, wz = D * 0.34;
+  for (const x of [-wx, wx]) for (const z of [-wz, wz]) {
+    const w = mesh(carWheelGeo, materials.tire, root, [x, CFG.carWheelR, z], true);
+    const hub = mesh(carHubGeo, materials.rim, root, [x + Math.sign(x) * 0.01, CFG.carWheelR, z], false);
+    wheels.push(w, hub);
+  }
+  const hlx = W * 0.32;
+  for (const x of [-hlx, hlx]) {
+    mesh(new THREE.SphereGeometry(0.16, 10, 8), materials.headlight, root, [x, 0.90, D * 0.5 + 0.02], false);
+    const beam = new THREE.Mesh(carBeamGeo, materials.beam);
+    beam.position.set(x, 0.90, D * 0.5 + 0.10);
+    root.add(beam);
+  }
+  const tlx = W * 0.36;
+  for (const x of [-tlx, tlx]) {
+    mesh(new THREE.BoxGeometry(0.30, 0.16, 0.06), materials.taillight, root, [x, 0.95, -D * 0.5 - 0.02], false);
+  }
+  return { wheels, halfDepth: 1.7 };
+}
+
+function buildTruck(root) {
+  const cabMat = truckMaterials[Math.floor(Math.random() * truckMaterials.length)];
+  const CW = CFG.truckCabW, CH = CFG.truckCabH, CD = CFG.truckCabD;
+  const BW = CFG.truckBoxW, BH = CFG.truckBoxH, BD = CFG.truckBoxD;
+  const cabZ = 2.6;
+  mesh(new THREE.BoxGeometry(CW, CH, CD), cabMat, root, [0, CH / 2 + CFG.truckWheelR + 0.1, cabZ], true);
+  mesh(new THREE.BoxGeometry(CW * 0.86, CH * 0.42, 0.06), materials.glass, root, [0, CH * 0.72, cabZ + CD / 2 + 0.03], false);
+  mesh(new THREE.BoxGeometry(0.06, CH * 0.42, CD * 0.7), materials.glass, root, [ CW / 2 + 0.01, CH * 0.72, cabZ], false);
+  mesh(new THREE.BoxGeometry(0.06, CH * 0.42, CD * 0.7), materials.glass, root, [-CW / 2 - 0.01, CH * 0.72, cabZ], false);
+  mesh(new THREE.BoxGeometry(CW + 0.05, 0.10, CD + 0.05), materials.trim, root, [0, CH + CFG.truckWheelR + 0.16, cabZ], false);
+  mesh(new THREE.CylinderGeometry(0.10, 0.10, 1.2, 8), materials.dark, root, [CW / 2 + 0.15, 2.0, cabZ - 0.6], false);
+  const boxZ = -1.35;
+  const boxY = BH / 2 + CFG.truckWheelR + 0.15;
+  mesh(new THREE.BoxGeometry(BW, BH, BD), materials.truckCargo, root, [0, boxY, boxZ], true);
+  mesh(new THREE.BoxGeometry(BW + 0.04, 0.35, BD * 0.95), materials.truckStripe, root, [0, boxY - 0.4, boxZ], false);
+  mesh(new THREE.BoxGeometry(BW + 0.06, 0.10, BD + 0.06), materials.trim, root, [0, boxY + BH / 2 + 0.05, boxZ], false);
+  const wheels = [];
+  const wx = BW * 0.52;
+  const axleZ = [cabZ - 0.2, boxZ + 1.2, boxZ - 1.2];
+  for (const x of [-wx, wx]) for (const z of axleZ) {
+    const w = mesh(truckWheelGeo, materials.tire, root, [x, CFG.truckWheelR, z], true);
+    const hub = mesh(truckHubGeo, materials.rim, root, [x + Math.sign(x) * 0.01, CFG.truckWheelR, z], false);
+    wheels.push(w, hub);
+  }
+  const hlx = CW * 0.32;
+  const hly = CFG.truckWheelR + 0.55;
+  for (const x of [-hlx, hlx]) {
+    mesh(new THREE.SphereGeometry(0.18, 10, 8), materials.headlight, root, [x, hly, cabZ + CD / 2 + 0.04], false);
+    const beam = new THREE.Mesh(truckBeamGeo, materials.beam);
+    beam.position.set(x, hly, cabZ + CD / 2 + 0.14);
+    root.add(beam);
+  }
+  for (const x of [-BW * 0.38, BW * 0.38]) {
+    mesh(new THREE.BoxGeometry(0.34, 0.20, 0.06), materials.taillight, root, [x, 0.85, boxZ - BD / 2 - 0.03], false);
+  }
+  return { wheels, halfDepth: CFG.truckHalfD };
+}
+
+/* =========================================================
+   13. ENTITY FACTORY / SPAWNING
+   ========================================================= */
+function addEntity(type, lane, z = CFG.spawnZ) {
+  const root = new THREE.Group();
+  root.position.set(laneX(lane), 0.2, z);
+  scene.add(root);
+  const data = { type, lane, root, phase: Math.random() * Math.PI * 2, extras: null };
+  if (type === "car")    data.extras = buildCar(root);
+  if (type === "truck")  data.extras = buildTruck(root);
+  if (type === "modak")  buildModak(root);
+  if (type === "sweet")  buildSweet(root);
+  if (type === "shield") buildShield(root);
+  state.entities.push(data);
+}
+
+function randomLaneExcept(exclude) {
+  const others = [];
+  for (let i = 0; i < CFG.laneCount; i++) if (i !== exclude) others.push(i);
+  return others[Math.floor(Math.random() * others.length)];
+}
+
+function spawnWave() {
+  const lane = Math.floor(Math.random() * CFG.laneCount);
+  const roll = Math.random();
+
+  let type;
+  if      (roll < 0.12) type = "shield";
+  else if (roll < 0.34) type = "modak";
+  else if (roll < 0.52) type = "sweet";
+  else if (roll < 0.67) type = "truck";
+  else                  type = "car";
+
+  addEntity(type, lane);
+
+  if (Math.random() < 0.28) {
+    addEntity(Math.random() < 0.6 ? "modak" : "sweet", randomLaneExcept(lane), CFG.spawnZ - 6);
+  }
+
+  const difficulty = Math.min(1, state.elapsed / 45);
+  if ((type === "car" || type === "truck") && Math.random() < difficulty * 0.55) {
+    addEntity(Math.random() < 0.55 ? "car" : "truck", randomLaneExcept(lane), CFG.spawnZ - 5);
+  }
+}
+
+/* =========================================================
+   14. GAME CONTROL
+   ========================================================= */
+function resetRunState() {
+  state.elapsed = 0; state.score = 0; state.treats = 0;
+  state.lane = 1; state.targetLane = 1;
+  state.jumpY = 0; state.jumpVel = 0; state.shield = 0;
+  state.speed = CFG.baseSpeed; state.spawnTimer = 0;
+  state.distance = 0; state.runPhase = 0; state.lastStepIndex = 0;
+
+  for (const e of state.entities) scene.remove(e.root);
+  state.entities.length = 0;
+
+  for (const s of state.scenery) {
+    s.z = ((s.z % s.span) + s.span) % s.span;
+    s.group.position.z = s.z;
+  }
+  scoreEl.textContent = "0";
+  modaksEl.textContent = "0";
+}
+
+function start() {
+  if (state.running) return;
+  unlockAudio();
+  applyDifficulty();
+  sfxStart();
+  resetRunState();
+
+  state.running = true;
+  state.paused = false;
+
+  message.classList.add("hidden");
+  gameOverEl.classList.add("hidden");
+  pauseOverlay.classList.add("hidden");
+
+  if (SETTINGS.musicLevel > 0) startMusic();
+
+  state.last = performance.now();
+  state.raf = requestAnimationFrame(loop);
+}
+
+function pauseGame() {
+  if (!state.running || state.paused) return;
+  state.paused = true;
+  cancelAnimationFrame(state.raf);
+  stopMusic();
+  pauseOverlay.classList.remove("hidden");
+}
+
+function resumeGame() {
+  if (!state.paused) return;
+  state.paused = false;
+  pauseOverlay.classList.add("hidden");
+  if (SETTINGS.musicLevel > 0) startMusic();
+  state.last = performance.now();
+  state.raf = requestAnimationFrame(loop);
+}
+
+function quitToMenu() {
+  state.running = false;
+  state.paused = false;
+  cancelAnimationFrame(state.raf);
+  stopMusic();
+
+  pauseOverlay.classList.add("hidden");
+  gameOverEl.classList.add("hidden");
+  settingsOverlay.classList.add("hidden");
+
+  const title = message.querySelector(".start-title");
+  if (title) title.textContent = "Ganesha Dash";
+  startButton.textContent = "Start Game";
+  message.classList.remove("hidden");
+
+  for (const e of state.entities) scene.remove(e.root);
+  state.entities.length = 0;
+  scoreEl.textContent = "0";
+  modaksEl.textContent = "0";
+  renderer.render(scene, camera);
+}
+
+function endGame() {
+  if (!state.running) return;
+  state.running = false;
+  state.paused = false;
+  cancelAnimationFrame(state.raf);
+  stopMusic();
+
+  const finalScore = Math.floor(state.score);
+  const isNewBest = finalScore > state.best;
+
+  if (isNewBest) {
+    state.best = finalScore;
+    localStorage.setItem("ganeshaDashBest", String(state.best));
+    newBestEl.classList.add("show");
+  } else {
+    newBestEl.classList.remove("show");
+  }
+  bestEl.textContent = state.best;
+
+  gameOverTitle.textContent = "Vighnaharta!";
+  finalBadge.textContent = `Score ${finalScore} · ${state.treats} treats`;
+  gameOverCopy.textContent = `You collected ${state.treats} treat${state.treats === 1 ? "" : "s"} this run. The street keeps getting busier — try again for a higher score!`;
+  gameOverEl.classList.remove("hidden");
+
+  sfxCrash();
+}
+
+/* =========================================================
+   15. INPUT
+   ========================================================= */
+function move(dir) {
+  if (!state.running || state.paused) return;
+  const next = state.targetLane + dir;
+  if (next < 0 || next > CFG.laneCount - 1) return;
+  state.targetLane = next;
+  sfxMove();
+}
+
+function jump() {
+  if (!state.running || state.paused) return;
+  if (state.jumpY > 0 || state.jumpVel > 0) return;
+  state.jumpVel = CFG.jumpVel;
+  sfxJump();
+}
+
+window.addEventListener("keydown", e => {
+  unlockAudio();
+
+  if (e.key === "Escape") {
+    if (state.running) pauseGame();
+    else if (state.paused) resumeGame();
+    return;
+  }
+
+  if (!state.running || state.paused) {
+    if (e.key === "Enter" && !state.running && !state.paused) start();
+    return;
+  }
+
+  if (["ArrowLeft", "a", "A"].includes(e.key)) move(-1);
+  if (["ArrowRight", "d", "D"].includes(e.key)) move(1);
+  if (["ArrowUp", "w", "W", " "].includes(e.key)) { e.preventDefault(); jump(); }
+}, { passive: false });
+
+let touchStart = null;
+canvas.addEventListener("touchstart", e => {
+  unlockAudio();
+  touchStart = e.changedTouches[0];
+}, { passive: true });
+
+canvas.addEventListener("touchend", e => {
+  if (!state.running || state.paused) { touchStart = null; return; }
+  if (!touchStart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStart.clientX;
+  const dy = t.clientY - touchStart.clientY;
+  touchStart = null;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 22) move(dx > 0 ? 1 : -1);
+  else if (dy < -18) jump();
+}, { passive: true });
+
+canvas.addEventListener("touchcancel", () => { touchStart = null; }, { passive: true });
+
+startButton.addEventListener("click", start);
+restartButton.addEventListener("click", start);
+gameoverMenuBtn.addEventListener("click", quitToMenu);
+resumeButton.addEventListener("click", resumeGame);
+pauseRestart.addEventListener("click", start);
+pauseMenuBtn.addEventListener("click", quitToMenu);
+
+pauseButton.addEventListener("click", () => {
+  if (state.running) pauseGame();
+  else if (state.paused) resumeGame();
+});
+
+/* ---------- settings wiring ---------- */
+function openSettings() {
+  if (state.running && !state.paused) pauseGame();
+  settingsOverlay.classList.remove("hidden");
+  syncSettingsUI();
+}
+function closeSettings() {
+  settingsOverlay.classList.add("hidden");
+  saveSettings();
+}
+settingsButton.addEventListener("click", openSettings);
+settingsClose.addEventListener("click", closeSettings);
+
+function syncSettingsUI() {
+  toggleSound.classList.toggle("on", SETTINGS.sound);
+  toggleSound.setAttribute("aria-checked", String(SETTINGS.sound));
+  toggleVibration.classList.toggle("on", SETTINGS.vibration);
+  toggleVibration.setAttribute("aria-checked", String(SETTINGS.vibration));
+
+  soundButton.textContent = SETTINGS.sound ? "🔊" : "🔇";
+  soundButton.setAttribute("aria-pressed", String(SETTINGS.sound));
+  soundButton.classList.toggle("off", !SETTINGS.sound);
+
+  musicButton.textContent = SETTINGS.musicLevel === 0 ? "🔇" : "♫";
+  musicButton.setAttribute("aria-pressed", String(SETTINGS.musicLevel > 0));
+  musicButton.classList.toggle("off", SETTINGS.musicLevel === 0);
+  musicButton.classList.toggle("playing", SETTINGS.musicLevel > 0);
+
+  difficultySeg.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", b.dataset.diff === SETTINGS.difficulty);
+  });
+  musicSeg.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.music) === SETTINGS.musicLevel);
+  });
+}
+
+soundButton.addEventListener("click", () => {
+  unlockAudio();
+  SETTINGS.sound = !SETTINGS.sound;
+  saveSettings();
+  syncSettingsUI();
+  if (SETTINGS.sound) sfxMove();
+});
+
+musicButton.addEventListener("click", () => {
+  unlockAudio();
+  const next = (SETTINGS.musicLevel + 1) % 4;
+  setMusicLevel(next);
+  if (SETTINGS.musicLevel > 0 && !state.running) sfxMove();
+});
+
+function bindToggle(el, key) {
+  const flip = () => {
+    unlockAudio();
+    SETTINGS[key] = !SETTINGS[key];
+    saveSettings();
+    syncSettingsUI();
+    if (SETTINGS[key] && key === "sound") sfxMove();
+    if (SETTINGS[key] && key === "vibration") buzz(25);
+  };
+  el.addEventListener("click", flip);
+  el.addEventListener("keydown", e => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
+  });
+}
+bindToggle(toggleSound, "sound");
+bindToggle(toggleVibration, "vibration");
+
+difficultySeg.querySelectorAll("button").forEach(b => {
+  b.addEventListener("click", () => {
+    SETTINGS.difficulty = b.dataset.diff;
+    saveSettings();
+    applyDifficulty();
+    syncSettingsUI();
+    sfxMove();
+  });
+});
+
+musicSeg.querySelectorAll("button").forEach(b => {
+  b.addEventListener("click", () => {
+    unlockAudio();
+    setMusicLevel(Number(b.dataset.music));
+  });
+});
+
+resetBestBtn.addEventListener("click", () => {
+  if (!confirm("Reset your best score?")) return;
+  state.best = 0;
+  localStorage.removeItem("ganeshaDashBest");
+  bestEl.textContent = "0";
+  newBestEl.classList.remove("show");
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && state.running && !state.paused) pauseGame();
+});
+
+syncSettingsUI();
+
+/* =========================================================
+   16. UPDATE
+   ========================================================= */
+function update(dt) {
+  const s = dt / 1000;
+
+  state.elapsed  += s;
+  state.score    += s * (8 + state.speed * 1.1);
+  state.distance += state.speed * s;
+
+  state.speed = Math.min(CFG.maxSpeed, CFG.baseSpeed + state.elapsed * CFG.speedRamp);
+
+  const speedT = (state.speed - CFG.baseSpeed) / Math.max(0.001, CFG.maxSpeed - CFG.baseSpeed);
+  music.bpm = 108 + speedT * 32;
+
+  const spawnInterval = Math.max(CFG.minSpawn, CFG.baseSpawn - state.elapsed * CFG.spawnRamp);
+  state.spawnTimer += dt;
+  if (state.spawnTimer >= spawnInterval) {
+    state.spawnTimer = 0;
+    spawnWave();
+  }
+
+  state.lane += (state.targetLane - state.lane) * Math.min(1, s * CFG.laneSmooth);
+  if (Math.abs(state.targetLane - state.lane) < 0.002) state.lane = state.targetLane;
+
+  if (state.jumpVel !== 0 || state.jumpY > 0) {
+    state.jumpVel += CFG.gravity * s;
+    state.jumpY   += state.jumpVel * s;
+    if (state.jumpY <= 0) { state.jumpY = 0; state.jumpVel = 0; }
+  }
+
+  const speedUnits = state.speed * s;
+  state.runPhase += speedUnits * 0.8;
+
+  const stepIndex = Math.floor(state.runPhase / Math.PI);
+  if (stepIndex !== state.lastStepIndex) {
+    state.lastStepIndex = stepIndex;
+    if (state.jumpY === 0) sfxStep();
+  }
+
+  const px = laneX(state.lane);
+  const vr = ganesha.root;
+  vr.position.x += (px - vr.position.x) * Math.min(1, s * CFG.laneSmooth);
+  vr.position.y = 0.08 + state.jumpY;
+  vr.rotation.y = Math.PI - (px - vr.position.x) * 0.10;
+  vr.rotation.z = (px - vr.position.x) * -0.05;
+
+  const stride = Math.sin(state.runPhase);
+  const handWave = Math.sin(state.runPhase * 1.6 + 1.1);
+  ganesha.arms[0].rotation.y =  stride * 1.15;
+  ganesha.arms[1].rotation.y = -stride * 1.15;
+  ganesha.arms[0].rotation.x =  handWave * 0.4;
+  ganesha.arms[1].rotation.x = -handWave * 0.4;
+  ganesha.arms[0].position.z = -0.05 + handWave * 0.35;
+  ganesha.arms[1].position.z = -0.05 - handWave * 0.35;
+  ganesha.legs[0].rotation.x =  stride * 0.7;
+  ganesha.legs[1].rotation.x = -stride * 0.7;
+  vr.rotation.x = Math.sin(state.runPhase * 2) * 0.02;
+
+  ganesha.shield.visible = state.shield === 1;
+  if (ganesha.shield.visible) {
+    ganesha.shield.rotation.y += s * 1.6;
+    ganesha.shield.scale.setScalar(1 + Math.sin(state.elapsed * 5) * 0.03);
+  }
+
+  const camTX = px * 0.5;
+  camera.position.x += (camTX - camera.position.x) * Math.min(1, s * 4);
+  camera.lookAt(camTX * 0.6, 2.0, -14);
+
+  roadTex.offset.y -= speedUnits / ROAD_UNIT_PER_TILE;
+  roadTex.offset.y = ((roadTex.offset.y % 1) + 1) % 1;
+
+  for (const sc of state.scenery) {
+    sc.z += speedUnits;
+    if (sc.z > sc.wrapTop) sc.z -= sc.span;
+    sc.group.position.z = sc.z;
+  }
+
+  const playerLaneFloat = state.lane;
+  const playerIsJumping = state.jumpY > CFG.clearHeight;
+  const playerHalfD = 1.0;
+
+  for (let i = state.entities.length - 1; i >= 0; i--) {
+    const e = state.entities[i];
+    const obj = e.root;
+
+    let speedMul = CFG.pickupSpeedMul;
+    if (e.type === "car")   speedMul = CFG.carSpeedMul;
+    if (e.type === "truck") speedMul = CFG.truckSpeedMul;
+
+    const travel = speedUnits * speedMul;
+    obj.position.z += travel;
+
+    if (e.type === "car" || e.type === "truck") {
+      const r = e.type === "truck" ? CFG.truckWheelR : CFG.carWheelR;
+      const spin = travel / r;
+      for (const w of e.extras.wheels) w.rotation.x += spin;
+    } else {
+      const t = state.elapsed * 3 + e.phase;
+      obj.position.y = 0.2 + Math.sin(t) * 0.16;
+      obj.rotation.y += s * 2.4;
+      obj.scale.setScalar(1 + Math.sin(t * 1.4) * 0.07);
+    }
+
+    let halfD = 0.6;
+    if (e.type === "car")   halfD = e.extras.halfDepth;
+    if (e.type === "truck") halfD = e.extras.halfDepth;
+    if (e.type === "modak" || e.type === "sweet" || e.type === "shield") halfD = 0.7;
+
+    const dz = Math.abs(obj.position.z - CFG.playerZ);
+    const laneDist = Math.abs(e.lane - playerLaneFloat);
+
+    if (dz < halfD + playerHalfD && laneDist < 0.55) {
+      if (e.type === "modak") {
+        state.treats++;
+        state.score += 100;
+        sfxCollectModak();
+        scene.remove(obj);
+        state.entities.splice(i, 1);
+        continue;
+      }
+      if (e.type === "sweet") {
+        state.treats++;
+        state.score += 50;
+        sfxCollectSweet();
+        scene.remove(obj);
+        state.entities.splice(i, 1);
+        continue;
+      }
+      if (e.type === "shield") {
+        state.shield = 1;
+        sfxShieldPickup();
+        scene.remove(obj);
+        state.entities.splice(i, 1);
+        continue;
+      }
+      if (e.type === "car" || e.type === "truck") {
+        if (playerIsJumping) continue;
+        if (state.shield === 1) {
+          state.shield = 0;
+          sfxShieldBreak();
+          scene.remove(obj);
+          state.entities.splice(i, 1);
+          continue;
+        }
+        scene.remove(obj);
+        state.entities.splice(i, 1);
+        endGame();
+        return;
+      }
+    }
+
+    if (obj.position.z > CFG.despawnZ) {
+      scene.remove(obj);
+      state.entities.splice(i, 1);
+    }
+  }
+
+  scoreEl.textContent = Math.floor(state.score);
+  modaksEl.textContent = state.treats;
+}
+
+/* =========================================================
+   17. LOOP
+   ========================================================= */
+function loop(now) {
+  if (!state.running || state.paused) return;
+  const dt = Math.min(50, now - state.last);
+  state.last = now;
+  update(dt);
+  renderer.render(scene, camera);
+  if (state.running && !state.paused) state.raf = requestAnimationFrame(loop);
+}
+
+renderer.render(scene, camera);
+</script>
+</body>
+</html>
